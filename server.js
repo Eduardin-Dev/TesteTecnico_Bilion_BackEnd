@@ -180,8 +180,89 @@ app.get('/dashboard/cursosPorReceita', async (req, res) => {
   }
 });
 
+// MÉTRICAS DO GRÁFICO
+app.get('/dashboard/graficoLinha', async (req, res) => {
+  try {
+    const vendas = await prisma.produtoComprado.findMany({
+      select: {
+        date: true,
+        precoVenda: true,
+      },
+      orderBy: {
+        date: 'asc',
+      },
+    });
+
+    const dadosGrafico = agruparVendasPorMes(vendas);
+
+    res.json(dadosGrafico);
+  } catch (error) {
+    console.error('Erro ao buscar vendas mensais:', error);
+    res
+      .status(500)
+      .json({ error: 'Erro interno no servidor ao processar vendas.' });
+  }
+});
+
+// Função auxiliar para formatar o mês (número para nome)
+const nomesMeses = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+];
+
+/**
+ * Agrupa e soma as vendas por mês/ano.
+ * @param {Array} vendas - Array de vendas vindo do Prisma (Venda.findMany)
+ * @returns {Array} - Array formatado com mes, receita e vendas
+ */
+function agruparVendasPorMes(vendas) {
+  const mapaMensal = {};
+
+  vendas.forEach((venda) => {
+    const dataVenda = venda.date;
+    const preco = venda.precoVenda || 0;
+
+    const ano = dataVenda.getFullYear();
+    const mesIndex = dataVenda.getMonth(); // 0 (Jan) a 11 (Dez)
+    const chave = `${ano}-${mesIndex.toString().padStart(2, '0')}`;
+
+    if (!mapaMensal[chave]) {
+      mapaMensal[chave] = {
+        receita: 0,
+        vendas: 0,
+        mes: nomesMeses[mesIndex],
+      };
+    }
+
+    // Acumula a receita e a contagem de vendas
+    mapaMensal[chave].receita += preco;
+    mapaMensal[chave].vendas += 1;
+  });
+
+  // Converte o mapa de volta para um array e ordena cronologicamente
+  const resultados = Object.keys(mapaMensal)
+    .sort() // Ordena pela chave "Ano-Mês"
+    .map((chave) => ({
+      mes: mapaMensal[chave].mes,
+      receita: parseFloat(mapaMensal[chave].receita.toFixed(2)),
+      vendas: mapaMensal[chave].vendas,
+    }));
+
+  return resultados;
+}
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
